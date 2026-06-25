@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>璃月契约录 · 金石之誓</title>
+
+  <!-- PWA 支持 -->
+  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+
+  <!-- Supabase 离线降级 -->
+  <script>
+    window.supabase = window.supabase || {
+      createClient: function() {
+        return {
+          from: function() { return this; },
+          select: function() { return this; },
+          eq: function() { return this; },
+          maybeSingle: function() { return Promise.resolve({ data: null, error: new Error('Supabase not loaded') }); },
+          upsert: function() { return Promise.resolve({ error: new Error('Supabase not loaded') }); }
+        };
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onerror="console.warn('Supabase SDK 加载失败，使用离线模式')"></script>
+
+  <style>
+    :root {
+      --bg: #1a1610;
+      --surface: rgba(35,31,23,0.85);
+      --gold: #c9a44b;
+      --gold2: #e8d5a3;
+      --accent: #d49b3b;
+      --jade: #7a9a6e;
+      --text: #f3ecd8;
+      --text2: #b8a88a;
+      --border: #5a4a2e;
+      --shadow: 0 12px 30px rgba(0,0,0,0.4);
+      --radius: 16px;
+      --font: '楷体', 'KaiTi', 'Noto Serif SC', '华文楷体', serif;
+    }
+    [data-theme="light"] {
+      --bg: #f5f0e8;
+      --surface: rgba(255,251,245,0.85);
+      --gold: #8b6914;
+      --gold2: #4a3e28;
+      --accent: #b8860b;
+      --jade: #4a6b3a;
+      --text: #3a3224;
+      --text2: #5c4e34;
+      --border: #c9a44b;
+      --shadow: 0 12px 30px rgba(0,0,0,0.08);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg);
+      font-family: var(--font);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex; justify-content: center; align-items: flex-start;
+      padding: 20px 12px 100px;
+      transition: background 0.5s, color 0.5s;
+      position: relative; overflow-x: hidden;
+      background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;
+    }
+    body::before {
+      content: ""; position: fixed; top:0; left:0; width:100%; height:100%;
+      background: radial-gradient(circle at 20% 20%, var(--accent) 0%, transparent 70%);
+      opacity: 0.06; pointer-events: none; z-index:0;
+    }
+    body.custom-bg::before { opacity: 0; }
+    canvas#particleCanvas { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+
+    .app { position:relative; z-index:1; width:100%; max-width:480px; margin:0 auto; }
+    .page { display:none; }
+    .page.active { display:block; }
+
+    .scroll {
+      background: linear-gradient(180deg, rgba(50,40,28,0.65) 0%, rgba(28,22,14,0.65) 30%, rgba(28,22,14,0.65) 70%, rgba(50,40,28,0.65) 100%);
+      border: 2px solid var(--gold); border-radius: var(--radius);
+      box-shadow: var(--shadow), inset 0 0 30px rgba(0,0,0,0.2);
+      padding: 20px 18px; margin-bottom: 20px; backdrop-filter: blur(4px); position: relative;
+    }
+    .scroll-title { text-align: center; font-size: 1.7rem; color: var(--gold); letter-spacing: 4px; margin-bottom: 6px; }
+    .scroll-sub { text-align: center; color: var(--text2); font-size: 0.9rem; margin-bottom: 20px; }
+
+    .stamp {
+      position: absolute; top:10px; right:20px; width:80px; height:80px;
+      background: radial-gradient(circle, #b71c1c, #7f0000); color: #ffd700;
+      border-radius: 50%; display:flex; align-items:center; justify-content:center;
+      font-weight: bold; font-size:0.9rem; transform: rotate(-15deg); opacity:0;
+      transition: 0.5s; box-shadow: 0 0 20px rgba(255,0,0,0.6); z-index:10; pointer-events: none;
+    }
+    .stamp.show { opacity:0.9; transform: rotate(-15deg) scale(1); }
+
+    .main-mission-box {
+      background: linear-gradient(135deg, rgba(201,164,75,0.18) 0%, rgba(100,80,30,0.18) 100%);
+      border: 1px solid var(--gold); border-radius: 14px; padding: 14px; margin-bottom: 16px;
+      position: relative; backdrop-filter: blur(3px);
+    }
+    .main-label { color: var(--gold); font-weight: bold; font-size: 0.8rem; letter-spacing: 2px; }
+    .dialogue { font-style: italic; color: var(--gold2); margin: 8px 0; font-size: 0.95rem; line-height: 1.5; }
+    .task-desc { color: var(--text); background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; margin: 8px 0; }
+    .options-row { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .opt-btn {
+      background: rgba(0,0,0,0.35); border: 1px solid var(--border); color: var(--text2);
+      padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;
+      transition: 0.2s; text-align: left;
+    }
+    .opt-btn:hover { background: var(--accent); color: #111; border-color: var(--accent); }
+    .opt-btn.chosen { background: var(--accent); color: #111; border-color: var(--accent); font-weight: bold; }
+
+    .commission-item {
+      display:flex; align-items:center; gap:10px; padding:10px;
+      margin:6px 0; background: rgba(0,0,0,0.18); border-radius:12px;
+      border-left: 4px solid var(--border); transition:0.2s; backdrop-filter: blur(3px);
+    }
+    .commission-item.done { border-left-color: var(--accent); opacity:0.8; background: rgba(0,0,0,0.3); }
+    .commission-check {
+      width:28px; height:28px; border-radius:50%; border:2px solid var(--gold);
+      display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    }
+    .commission-check.checked { background: var(--accent); border-color: var(--accent); }
+    .commission-check.checked::after { content:"✓"; color:#1a1a1a; font-weight:bold; }
+    .commission-text { flex:1; font-size:0.9rem; }
+    .commission-reward { font-size:0.8rem; color:var(--accent); font-weight:bold; }
+
+    .progress-bar { height:10px; background:rgba(34,29,20,0.5); border-radius:10px; overflow:hidden; margin:10px 0; }
+    .progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), #daa520); width:0%; border-radius:10px; transition:0.4s; }
+
+    .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin:12px 0; }
+    .day-cell, .weekday-cell {
+      aspect-ratio:1; border-radius:8px; display:flex; align-items:center; justify-content:center;
+      font-size:0.65rem; border:1px solid var(--border); transition:0.2s; backdrop-filter: blur(3px);
+    }
+    .day-cell {
+      background: rgba(30,25,18,0.45); cursor:pointer;
+      box-shadow: inset 0 1px 3px rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.15);
+    }
+    .day-cell.completed {
+      background: radial-gradient(circle at 30% 20%, var(--accent), #8a5e19);
+      color:#1a1a1a; font-weight:bold;
+      box-shadow: inset 0 2px 4px rgba(255,255,255,0.3), 0 2px 6px var(--accent);
+    }
+    .day-cell.today { border:2px solid var(--gold); box-shadow:0 0 10px var(--gold); }
+    .day-cell.future { opacity:0.5; cursor:not-allowed; }
+    .weekday-cell { background: transparent; border:1px solid transparent; color: var(--text2); font-weight:bold; font-size:0.7rem; }
+
+    .btn {
+      background:rgba(0,0,0,0.4); border:1px solid var(--border); color:var(--text2);
+      padding:8px 16px; border-radius:20px; cursor:pointer; font-size:0.85rem; transition:0.2s;
+      backdrop-filter: blur(2px);
+    }
+    .btn:hover { background:var(--accent); color:#111; border-color:var(--accent); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #b8860b);
+      border:none; color:white; font-weight:bold; padding:14px; border-radius:40px;
+      cursor:pointer; box-shadow:0 5px 20px var(--accent); letter-spacing:2px; width:100%; margin:8px 0;
+    }
+    .btn-warning {
+      background: linear-gradient(135deg, #d4722a, #b85c1a);
+      border:none; color:white; font-weight:bold; padding:14px; border-radius:40px;
+      cursor:pointer; box-shadow:0 5px 20px rgba(212,114,42,0.6); letter-spacing:2px; width:100%; margin:8px 0;
+    }
+
+    .bottom-nav {
+      position:fixed; bottom:0; left:0; right:0; background:rgba(16,12,6,0.8);
+      display:flex; justify-content:space-around; padding:8px; z-index:100;
+      border-top:1px solid var(--border); backdrop-filter:blur(8px);
+    }
+    .nav-item { background:none; border:none; color:var(--text2); display:flex; flex-direction:column; align-items:center; font-size:0.7rem; cursor:pointer; }
+    .nav-item.active { color:var(--gold); }
+
+    .modal {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); z-index:200;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .modal-content {
+      background: var(--surface); border:2px solid var(--gold); border-radius:20px;
+      padding:20px; max-width:420px; width:90%; max-height:80vh; overflow-y:auto;
+      box-shadow:0 20px 40px rgba(0,0,0,0.8);
+    }
+
+    .badge-card {
+      background: rgba(0,0,0,0.25); border-radius:12px; padding:10px;
+      display: flex; align-items: center; gap:12px; margin:6px 0;
+      border:1px solid var(--border); backdrop-filter: blur(3px);
+    }
+    .badge-icon { font-size:2rem; }
+    .locked { opacity:0.5; filter: grayscale(1); }
+
+    .float-primo {
+      position:fixed; pointer-events:none; font-size:1.5rem; color:var(--gold);
+      animation:floatUp 1.2s ease-out forwards; z-index:300;
+    }
+    @keyframes floatUp { 0%{opacity:1; transform:translateY(0);} 100%{opacity:0; transform:translateY(-60px);} }
+    .toast {
+      position:fixed; bottom:120px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.8); border:1px solid var(--gold); color:var(--gold2);
+      padding:10px 24px; border-radius:30px; z-index:300; animation:toastIn 0.4s, toastOut 0.4s 2.5s forwards;
+    }
+    @keyframes toastIn { 0%{opacity:0; transform:translateX(-50%) translateY(20px);} 100%{opacity:1; transform:translateX(-50%) translateY(0);} }
+    @keyframes toastOut { 0%{opacity:1;} 100%{opacity:0; transform:translateX(-50%) translateY(-10px);} }
+
+    .theme-btn { width:28px; height:28px; border-radius:50%; border:2px solid transparent; cursor:pointer; transition:0.2s; }
+    .theme-btn.active { border-color: var(--gold); }
+
+    [data-theme="light"] .scroll {
+      background: linear-gradient(180deg, rgba(220,210,190,0.65) 0%, rgba(240,235,220,0.65) 30%, rgba(240,235,220,0.65) 70%, rgba(220,210,190,0.65) 100%);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.05), inset 0 0 30px rgba(0,0,0,0.05);
+    }
+    [data-theme="light"] .main-mission-box { background: linear-gradient(135deg, rgba(139,105,20,0.12) 0%, rgba(180,130,40,0.12) 100%); }
+    [data-theme="light"] .task-desc { background: rgba(200,180,150,0.25); }
+    [data-theme="light"] .commission-item { background: rgba(200,180,150,0.2); }
+    [data-theme="light"] .commission-item.done { background: rgba(180,160,130,0.35); }
+    [data-theme="light"] .day-cell { background: rgba(200,180,150,0.35); box-shadow: inset 0 1px 3px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.05); }
+    [data-theme="light"] .progress-bar { background: rgba(224,213,197,0.5); }
+    [data-theme="light"] .btn { background: rgba(200,180,150,0.4); color: #4a3e28; border-color: #b8860b; }
+    [data-theme="light"] .btn:hover { background: #b8860b; color: white; }
+    [data-theme="light"] .opt-btn { background: rgba(200,180,150,0.4); color: #4a3e28; border-color: #b8860b; }
+    [data-theme="light"] .opt-btn:hover { background: #b8860b; color: white; }
+    [data-theme="light"] .bottom-nav { background: rgba(240,235,220,0.8); }
+    [data-theme="light"] input, [data-theme="light"] textarea { background: #f0ebe0; color: #3a3224; border-color: #c9a44b; }
+    [data-theme="light"] .modal-content { background: rgba(255,251,245,0.95); }
+    [data-theme="light"] .toast { background: rgba(240,235,220,0.9); color: #4a3e28; border-color: #b8860b; }
+    [data-theme="light"] .badge-card { background: rgba(200,180,150,0.25); }
+  </style>
+</head>
+<body>
+  <canvas id="particleCanvas"></canvas>
+  <div class="app">
+    <!-- 立契页面 -->
+    <div id="page-contract" class="page active">
+      <div class="scroll">
+        <div class="scroll-title">⚖️ 立下新契</div>
+        <div class="scroll-sub">千岩牢固，重诺如山</div>
+        <label>起始之日</label>
+        <input type="date" id="initStartInput" style="width:100%; padding:10px; margin:8px 0; background:#2a241a; border:1px solid var(--border); border-radius:10px; color:var(--text);">
+        <label>持续天数 (30-365)</label>
+        <input type="number" id="initDaysInput" min="30" max="365" value="90" style="width:100%; padding:10px; margin:8px 0; background:#2a241a; border:1px solid var(--border); border-radius:10px; color:var(--text);">
+        <button class="btn-primary" id="initContractBtn">📜 立契并写下初心</button>
+      </div>
+    </div>
+
+    <!-- 委托页 -->
+    <div id="page-home" class="page">
+      <div class="scroll">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div></div>
+          <button class="btn" id="quickSettingsBtn" style="margin-bottom:10px;">⚙️</button>
+        </div>
+        <div class="scroll-title">⚖️ 璃月契约录</div>
+        <div class="scroll-sub">千岩牢固，重诺如山</div>
+        <div class="stamp" id="dailyStamp">契<br>约<br>达<br>成</div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+          <span style="color:var(--gold);">📜 今日委托</span>
+          <span>💎 <span id="primoCountHome">0</span></span>
+        </div>
+        <div id="mainMissionContainer"></div>
+        <div id="subMissionLabel" style="color:var(--gold); margin:12px 0 6px;">📋 日常委托</div>
+        <div id="commissionList"></div>
+        <button class="btn-primary" id="wishBtnHome">✨ 祈愿 · 160 原石</button>
+      </div>
+    </div>
+
+    <!-- 日历页 -->
+    <div id="page-calendar" class="page">
+      <div class="scroll">
+        <div class="scroll-title">📅 契约之历</div>
+        <div class="scroll-sub">石心不移，日日为印</div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+          <span>契约进度</span><span id="progressPercentCal">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFillCal"></div></div>
+        <div style="display:flex; justify-content:space-between; margin:12px 0;">
+          <span>💎 原石 <span id="primoCountCal">0</span></span>
+          <span>✅ 已打卡 <span id="doneCountCal">0</span>/<span id="totalDaysCal">0</span> 天</span>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <button class="btn-primary" id="wishBtnCal">✨ 祈愿 · 160 原石</button>
+      </div>
+    </div>
+
+    <!-- 纪念页 -->
+    <div id="page-complete" class="page">
+      <div class="scroll" style="text-align:center;">
+        <div class="scroll-title">🌟 契约履行完毕</div>
+        <div style="margin:20px 0;">
+          <p style="color:var(--gold);">💌 初心留言</p>
+          <p id="vowDisplay" style="font-size:1.2rem; margin:10px 0;"></p>
+        </div>
+        <div style="margin:20px 0;">
+          <p style="color:var(--gold);">🎁 获得的奖励</p>
+          <div id="completeRewardList"></div>
+        </div>
+        <div style="margin:20px 0;">
+          <p>💎 <span id="completePrimoCount">0</span></p>
+          <button class="btn-primary" id="completeWishBtn">✨ 祈愿 · 160 原石 (完成加成)</button>
+        </div>
+        <button class="btn-primary" id="newContractAfterCompleteBtn">📝 签订新契约</button>
+        <button class="btn-warning" id="backToHomeBtn">⬅️ 返回今日契约</button>
+      </div>
+    </div>
+
+    <!-- 卷轴页 -->
+    <div id="page-scroll" class="page">
+      <div class="scroll">
+        <div class="scroll-title">📜 契约卷轴</div>
+        <div id="currentContractInfo" style="margin-bottom:16px;"></div>
+        <div style="color:var(--gold); margin-bottom:8px;">🏛️ 过往契约</div>
+        <div id="contractHistoryList"></div>
+      </div>
+    </div>
+
+    <!-- 印章页 -->
+    <div id="page-badges" class="page">
+      <div class="scroll">
+        <div class="scroll-title">🏅 契约之印</div>
+        <div id="achievementsGrid" style="margin-top:16px;"></div>
+      </div>
+    </div>
+
+    <!-- 行囊页 -->
+    <div id="page-me" class="page">
+      <div class="scroll">
+        <div class="scroll-title">⚙️ 行囊</div>
+        <div style="display:flex; justify-content:center; gap:8px; margin:12px 0;">
+          <div class="theme-btn active" data-theme="stone" style="background:#2b2318;"></div>
+          <div class="theme-btn" data-theme="light" style="background:#f5f0e8;"></div>
+        </div>
+        <button class="btn" id="recontractBtn" style="width:100%; margin-bottom:8px;">📝 签订新契约</button>
+
+        <div class="scroll" style="margin-top:16px; padding:12px;">
+          <div style="color:var(--gold);">🖼️ 背景设置</div>
+          <p style="font-size:0.8rem; color:var(--text2); margin:4px 0;">建议尺寸：1080×1920 竖版图片</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+            <button class="btn" id="presetBg1Btn">🌄 璃月港</button>
+            <button class="btn" id="presetBg2Btn">⛰️ 绝云间</button>
+            <button class="btn" id="presetBg3Btn">🌸 荻花洲</button>
+          </div>
+          <div style="display:flex; gap:8px; margin:8px 0;">
+            <input type="text" id="bgUrlInput" placeholder="输入图片URL" style="flex:1; padding:8px; background:#2a241a; border:1px solid var(--border); border-radius:8px; color:var(--text);">
+            <button class="btn" id="applyBgUrlBtn">应用</button>
+          </div>
+          <div style="display:flex; gap:8px; margin:8px 0;">
+            <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
+            <button class="btn" id="uploadBgBtn">📁 上传图片</button>
+            <button class="btn" id="clearBgBtn">🗑️ 清除背景</button>
+          </div>
+        </div>
+
+        <div class="scroll" style="margin-top:12px; padding:12px;">
+          <div style="color:var(--gold);">📜 剧情包 (主线/副线)</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+            <button class="btn" id="exportStoryJsonBtn">📤 导出JSON</button>
+            <button class="btn" id="importStoryJsonBtn">📥 导入JSON</button>
+            <button class="btn" id="exportStoryCsvBtn">📤 导出CSV</button>
+            <button class="btn" id="importStoryCsvBtn">📥 导入CSV</button>
+            <button class="btn" id="resetStoryBtn">🔄 重置默认</button>
+          </div>
+        </div>
+
+        <div class="scroll" style="margin-top:12px; padding:12px;">
+          <div style="color:var(--gold);">📦 委托库</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+            <button class="btn" id="exportPoolCsvBtn">📤 导出CSV</button>
+            <button class="btn" id="importPoolCsvBtn">📥 导入CSV</button>
+            <button class="btn" id="exportPoolJsonBtn">📤 导出JSON</button>
+            <button class="btn" id="importPoolJsonBtn">📥 导入JSON</button>
+            <button class="btn" id="addCommissionBtn">➕ 添加</button>
+          </div>
+        </div>
+
+        <div class="scroll" style="margin-top:12px; padding:12px;">
+          <div style="color:var(--gold);">🎁 奖励库</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+            <button class="btn" id="exportRewardCsvBtn">📤 导出CSV</button>
+            <button class="btn" id="importRewardCsvBtn">📥 导入CSV</button>
+            <button class="btn" id="exportRewardJsonBtn">📤 导出JSON</button>
+            <button class="btn" id="importRewardJsonBtn">📥 导入JSON</button>
+            <button class="btn" id="addRewardBtn">➕ 添加</button>
+          </div>
+        </div>
+
+        <div class="scroll" style="margin-top:12px; padding:12px;">
+          <div style="color:var(--gold);">💬 激励语库</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+            <button class="btn" id="exportEncourageCsvBtn">📤 导出CSV</button>
+            <button class="btn" id="importEncourageCsvBtn">📥 导入CSV</button>
+            <button class="btn" id="exportEncourageJsonBtn">📤 导出JSON</button>
+            <button class="btn" id="importEncourageJsonBtn">📥 导入JSON</button>
+            <button class="btn" id="addEncourageBtn">➕ 添加</button>
+          </div>
+        </div>
+
+        <button class="btn" id="resetAllBtn" style="width:100%; margin-top:20px;">⚜️ 重置一切</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav" id="bottomNav" style="display:none;">
+    <button class="nav-item active" data-page="home"><span>📜</span>委托</button>
+    <button class="nav-item" data-page="calendar"><span>📅</span>日历</button>
+    <button class="nav-item" data-page="scroll"><span>📖</span>卷轴</button>
+    <button class="nav-item" data-page="badges"><span>🏅</span>印章</button>
+    <button class="nav-item" data-page="me"><span>⚙️</span>行囊</button>
+  </div>
+
+  <!-- 弹窗 -->
+  <div id="wishModal" class="modal" style="display:none;">
+    <div class="modal-content" style="text-align:center;">
+      <div id="wishResultContent"></div>
+      <button class="btn" onclick="document.getElementById('wishModal').style.display='none'">收下</button>
+    </div>
+  </div>
+  <div id="newContractModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3 style="color:var(--gold);">📝 立下新契</h3>
+      <label>起始日</label>
+      <input type="date" id="newStartInput" style="width:100%; padding:10px; margin:8px 0; background:#2a241a; border:1px solid var(--border); border-radius:10px; color:var(--text);">
+      <label>天数 (30-365)</label>
+      <input type="number" id="newDaysInput" min="30" max="365" value="90" style="width:100%; padding:10px; margin:8px 0; background:#2a241a; border:1px solid var(--border); border-radius:10px; color:var(--text);">
+      <button class="btn-primary" id="confirmNewContractBtn">立契并书写初心</button>
+      <button class="btn" onclick="document.getElementById('newContractModal').style.display='none'" style="width:100%;">取消</button>
+    </div>
+  </div>
+  <div id="vowModal" class="modal" style="display:none;">
+    <div class="modal-content" style="text-align:center;">
+      <h3 style="color:var(--gold);">🌟 契约初心</h3>
+      <p>写给完成契约后的自己：</p>
+      <textarea id="vowMessageInput" style="width:100%; height:80px; background:#2a241a; color:var(--text); border:1px solid var(--border); border-radius:10px; padding:10px;"></textarea>
+      <button class="btn-primary" id="saveVowBtn">封印留言</button>
+    </div>
+  </div>
+  <div id="contractDetailModal" class="modal" style="display:none;">
+    <div class="modal-content" id="contractDetailContent"></div>
+  </div>
+  <div id="importModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3 id="importModalTitle" style="color:var(--gold);">导入</h3>
+      <textarea id="importTextarea" style="width:100%; height:200px; background:#2a241a; color:var(--text); border:1px solid var(--border); border-radius:10px; padding:10px;"></textarea>
+      <button class="btn-primary" id="confirmImportBtn">导入</button>
+      <button class="btn" onclick="document.getElementById('importModal').style.display='none'">取消</button>
+    </div>
+  </div>
+  <div id="addItemModal" class="modal" style="display:none;">
+    <div class="modal-content" id="addItemContent"></div>
+  </div>
+
+<script>
+(async function() {
+  // ---------- Supabase ----------
+  const supabase = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(
+    'https://bxhjmzvkmiipnjkdyprx.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4aGptenZrbWlpcG5qa2R5cHJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MTE0NzcsImV4cCI6MjA5MjM4NzQ3N30.U-cn_zT2cmD12-8NOFVfsJRShGMzl3S7a-2yrfDF6Dc'
+  ) : null;
+  let deviceId = localStorage.getItem('device_id') || (localStorage.setItem('device_id', crypto.randomUUID()), localStorage.getItem('device_id'));
+
+  // ---------- 常量 ----------
+  const PRESET_BACKGROUNDS = [
+    { name:'璃月港', url:'https://uploadstatic.mihoyo.com/contentweb/20200327/2020032715285437262.png' },
+    { name:'绝云间', url:'https://uploadstatic.mihoyo.com/contentweb/20200327/2020032715302061428.png' },
+    { name:'荻花洲', url:'https://uploadstatic.mihoyo.com/contentweb/20200327/2020032715311585023.png' }
+  ];
+
+  const DEFAULT_STORY_PACK = {
+    name:"归离原之约·钟离与魈",
+    mainLine:[
+      { day:1, speaker:"钟离", dialogue:"旅者，归离原近日有业障气息复现，我需一人同行。若你愿意，每日此时来此。", task:"今日完成你的第一个小目标（学习/工作30分钟或运动20分钟）。", options:[{text:"赴约",reward:8},{text:"婉拒",reward:0}] },
+      { day:2, speaker:"钟离", dialogue:"昨日未见你来……无妨，今日再约。", task:"完成今日核心任务（如专注30分钟）。", options:[{text:"履约",reward:10},{text:"仍婉拒",reward:0}] },
+      { day:3, speaker:"钟离", dialogue:"这是魈的足迹……保持清醒，追踪业障。", task:"今天完成至少2个25分钟的专注时段。", options:[{text:"仔细追踪",reward:12},{text:"粗略查看",reward:6}] },
+      { day:7, speaker:"钟离", dialogue:"此物名为镇石，戴在身上。每日履约前来，便是净化。", task:"整理你常用的空间10分钟。", options:[{text:"收纳净化",reward:12},{text:"维持现状",reward:6}] },
+      { day:10, speaker:"钟离", dialogue:"昨夜感知魈的气息极微弱……持续锚定。", task:"完成一次无打断的深度任务（如完整学习1小时）。", options:[{text:"我会每日前来",reward:15},{text:"我可能无法保证",reward:8}] },
+      { day:15, speaker:"？？？", dialogue:"夜叉……在下面……很黑……很冷……", task:"额外做一件帮助他人的事。", options:[{text:"追踪丘丘人",reward:15},{text:"等待钟离",reward:10}] },
+      { day:20, speaker:"钟离", dialogue:"旅者，契约固然重要，但亦需养护。今日不必前来。", task:"今天允许自己彻底休息。", options:[{text:"安心休憩",reward:10},{text:"仍勉强前来",reward:4}] },
+      { day:30, speaker:"钟离", dialogue:"镇石已锁定魈的位置。助我，将他带出来。", task:"完成一次完美打卡：完整无打断执行核心任务。", options:[{text:"完美履约",reward:25},{text:"勉强完成",reward:15}] },
+      { day:35, speaker:"魈", dialogue:"我不需要怜悯……若你执意要来，便带些能入口的东西。", task:"学做一道简单的料理或为自己认真准备一餐饭。", options:[{text:"亲手制作",reward:15},{text:"叫外卖凑合",reward:5}] },
+      { day:42, speaker:"魈", dialogue:"退后！……你手上的镇石，给我看看。", task:"执行一项突破舒适区的任务。", options:[{text:"不退",reward:20,cond:"primo>=200"},{text:"后退",reward:10}] },
+      { day:50, speaker:"魈", dialogue:"裂隙非天灾，是冲我来的。", task:"完成一项团队协作任务。", options:[{text:"我和你一起",reward:18},{text:"让钟离处理",reward:10}] },
+      { day:70, speaker:"魈", dialogue:"契约……你已完成。接下来，是我的。", task:"主动帮助一个人并记录。", options:[{text:"拉住他",reward:25,cond:"primo>=500"},{text:"尊重他的选择",reward:15}] },
+      { day:75, speaker:"魈", dialogue:"我不习惯别人为我如此……（共鸣第一日）", task:"连续7天固定时间打卡。", options:[{text:"开始共鸣",reward:20}] },
+      { day:90, speaker:"钟离", dialogue:"今日是契约终章。", task:"回顾这90天，写下感受或收获。", options:[{text:"完成契约",reward:30}] }
+    ],
+    subPool:[
+      { id:"sub1", speaker:"钟离", dialogue:"三碗不过港的田铁嘴新得好茶，替我去品鉴一番。", task:"为自己泡一杯茶，慢慢喝完，不刷手机。", reward:5, cat:"闲游" },
+      { id:"sub2", speaker:"魈", dialogue:"你若夜跑，带上这枚符箓。", task:"进行一次户外步行或夜跑，不少于20分钟。", reward:8, cat:"守望" },
+      { id:"sub3", speaker:"胡桃", dialogue:"帮我想句宣传语呗~", task:"记录一句有趣的话或写一段随感（50字以上）。", reward:5, cat:"杂务" },
+      { id:"sub4", speaker:"钟离", dialogue:"今日做一件你已拖延三日之事。", task:"处理一件你拖延的事（哪怕只做5分钟）。", reward:10, cat:"凡人" },
+      { id:"sub5", speaker:"魈", dialogue:"清心可缓解业障之痛……", task:"整理药品/保健品/护肤品，丢弃过期之物。", reward:5, cat:"守望" },
+      { id:"sub6", speaker:"钟离", dialogue:"解翠行掌柜说有枚玉佩似有地脉残余，替我去鉴别。", task:"学习一项新知识/技能至少15分钟，并做笔记。", reward:6, cat:"闲游" },
+      { id:"sub7", speaker:"魈", dialogue:"寻些琉璃袋与清心，混以蜂蜜。", task:"为自己或家人准备一份健康食物/饮品。", reward:8, cat:"守望" },
+      { id:"sub8", speaker:"往生堂仪倌", dialogue:"呜……丧仪流程又记混了。", task:"练习记忆或背诵（背诗、单词、流程）20分钟。", reward:5, cat:"杂务" },
+      { id:"sub9", speaker:"钟离", dialogue:"业障会趁虚而入。", task:"执行你最不想做但却必须做的任务25分钟。", reward:12, cat:"凡人" },
+      { id:"sub10", speaker:"魈", dialogue:"言笑教了我做法……来试味。", task:"亲自做一道甜品或简单菜式，拍照记录。", reward:10, cat:"守望" },
+      { id:"sub11", speaker:"钟离", dialogue:"寻些朱砂与黄纸来。", task:"整理文件、合同、账单或学习资料。", reward:6, cat:"闲游" },
+      { id:"sub12", speaker:"魈", dialogue:"今日，陪我片刻即可。", task:"给自己10分钟完全静坐/冥想。", reward:8, cat:"守望" },
+      { id:"sub13", speaker:"胡桃", dialogue:"写一封告别信给最糟的自己。", task:"写一段你想抛弃的坏习惯，并写下告别宣言。", reward:5, cat:"杂务" },
+      { id:"sub14", speaker:"钟离", dialogue:"封印仅差一步。", task:"完成那个一直想做但没开始的小目标第一步。", reward:15, cat:"凡人" }
+    ]
+  };
+
+  const DEFAULT_COMMISSION_POOL = [
+    { cat:"学习", text:"阅读非专业书籍20页", base:5 },
+    { cat:"健康", text:"做15分钟晨间拉伸", base:8 },
+    { cat:"整理", text:"整理书桌并擦拭", base:5 },
+    { cat:"人际", text:"给家人真诚问候", base:5 },
+    { cat:"创造", text:"写100字日记", base:8 }
+  ];
+  const DEFAULT_REWARD_POOL = [
+    { name:'一杯奶茶', rarity:3, emoji:'🧋' },
+    { name:'看一集动漫', rarity:3, emoji:'📺' },
+    { name:'看一场电影', rarity:4, emoji:'🎬' },
+    { name:'买一件心仪好物', rarity:5, emoji:'🛍️' }
+  ];
+  const DEFAULT_ENCOURAGE = ["金石为开，只因你从未停步。","今日的汗水是明日岩脊的纹路。","钟离会为你泡一杯茶，等你凯旋。"];
+
+  const ACHIEVEMENTS = [
+    { id:'first_day', name:'契约初签', desc:'完成第一天打卡', icon:'📝', cond:s=>s.contract&&s.contract.completed[0] },
+    { id:'streak7', name:'七日之岩', desc:'连续7天打卡', icon:'🪨', cond:s=>maxStreak(s)>=7 },
+    { id:'streak30', name:'层岩巨渊', desc:'连续30天打卡', icon:'⛰️', cond:s=>maxStreak(s)>=30 },
+    { id:'all_done', name:'每日圆满', desc:'一日内完成所有委托', icon:'🏆', cond:s=>s.todayLocked },
+    { id:'contract_complete', name:'契约履行', desc:'完成整个契约', icon:'⚜️', cond:s=>!s.contract.active&&s.contract.completed.slice(0,getTodayIndex(s)+1).every(v=>v) },
+    { id:'gems_1000', name:'璃月富商', desc:'累计获得1000原石', icon:'💰', cond:s=>s.totalGemsEarned>=1000 },
+    { id:'wish_10', name:'祈愿十连', desc:'进行10次祈愿', icon:'🔟', cond:s=>s.wishCount>=10 },
+    { id:'three_contracts', name:'契约达人', desc:'完成3个契约', icon:'📜', cond:s=>s.contractHistory.filter(h=>h.doneDays===h.duration).length>=3 },
+    { id:'message_left', name:'心之留言', desc:'立契时写下初心寄语', icon:'💌', cond:s=>s.currentContractMessage!=='' },
+    { id:'full_streak', name:'坚如磐石', desc:'连续完成所有委托', icon:'🗿', cond:s=>maxStreak(s)===s.contract.completed.length },
+  ];
+
+  // ---------- 状态 ----------
+  let state = {
+    contract:null, commissions:{date:new Date().toDateString(),list:[],history:{},mainMissionDone:false,mainChoiceIdx:-1},
+    primogems:0, wishResults:[], achievements:[], contractHistory:[],
+    commissionPool:DEFAULT_COMMISSION_POOL, rewardPool:DEFAULT_REWARD_POOL, encouragePool:DEFAULT_ENCOURAGE,
+    storyPack:JSON.parse(JSON.stringify(DEFAULT_STORY_PACK)), theme:'stone', backgroundImage:null,
+    dailyBonusClaimed:false, todayLocked:false, currentContractAchievements:[], currentContractRewards:[],
+    currentContractMessage:'', totalGemsEarned:0, wishCount:0, messageSealed:true
+  };
+
+  // ---------- 工具函数 ----------
+  function maxStreak(s){ if(!s.contract)return 0; let max=0,cur=0; for(let v of s.contract.completed){ if(v)cur++;else{if(cur>max)max=cur;cur=0;}} return Math.max(max,cur); }
+  function getTodayIndex(s){ const start=new Date(s.contract.start); const today=new Date(); today.setHours(0,0,0,0); return Math.floor((today-start.setHours(0,0,0,0))/86400000); }
+
+  // 音频
+  let audioCtx;
+  function initAudio(){ if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); }
+  function sfxReward(){ playTone(1200,'sine',0.08,0.12); setTimeout(()=>playTone(1600,'sine',0.06,0.1),60); }
+  function sfxComplete(){ playTone(880,'sine',0.1,0.15); setTimeout(()=>playTone(1100,'sine',0.1,0.1),80); setTimeout(()=>playTone(1320,'triangle',0.15,0.1),160); }
+  function sfxWish(){ for(let i=0;i<8;i++) setTimeout(()=>playTone(300+i*150,'triangle',0.15,0.08),i*40); }
+  function playTone(f,t,d,v=0.1){ if(!audioCtx)return; let o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type=t; o.frequency.setValueAtTime(f,audioCtx.currentTime); g.gain.setValueAtTime(v,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+d); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d); }
+
+  // ---------- 数据持久化 ----------
+  async function saveData(){ localStorage.setItem('liyue_state',JSON.stringify(state)); if(supabase){ try{ await supabase.from('user_state').upsert({user_id:deviceId,state:state,updated_at:new Date()},{onConflict:'user_id'}); }catch(e){console.error(e);} } }
+  async function loadData(){
+    let local=localStorage.getItem('liyue_state'); if(local)try{state=Object.assign(state,JSON.parse(local));}catch(e){}
+    if(supabase){ try{ const {data,error}=await supabase.from('user_state').select('state').eq('user_id',deviceId).maybeSingle(); if(!error&&data&&data.state){ state=Object.assign(state,data.state); localStorage.setItem('liyue_state',JSON.stringify(state)); } }catch(e){} }
+    if(!state.storyPack||!state.storyPack.mainLine) state.storyPack=JSON.parse(JSON.stringify(DEFAULT_STORY_PACK));
+    if(!state.commissionPool?.length) state.commissionPool=DEFAULT_COMMISSION_POOL;
+    if(!state.rewardPool?.length) state.rewardPool=DEFAULT_REWARD_POOL;
+    if(!state.encouragePool?.length) state.encouragePool=DEFAULT_ENCOURAGE;
+    if(state.contract){ repairAndCheck(); let todayStr=new Date().toDateString(); if(state.commissions.date!==todayStr){ state.commissions.history[state.commissions.date]=state.commissions.list; state.commissions=generateDailyMissions(); state.dailyBonusClaimed=false; state.todayLocked=false; } }
+    document.body.setAttribute('data-theme',state.theme); updateThemeButtons(); applyBackground(); applyContractState();
+  }
+
+  function repairAndCheck(){
+    if(!state.contract)return; const start=new Date(state.contract.start); const today=new Date(); today.setHours(0,0,0,0); const todayIdx=Math.floor((today-start.setHours(0,0,0,0))/86400000); const duration=state.contract.duration;
+    if(state.contract.completed.length!==duration){ state.contract.completed=new Array(duration).fill(false); state.contract.mended=new Array(duration).fill(false); }
+    for(let i=0;i<duration;i++)if(i>todayIdx)state.contract.completed[i]=false;
+    const allPastCompleted=todayIdx>=0&&state.contract.completed.slice(0,Math.min(todayIdx+1,duration)).every(v=>v); state.contract.active=!(todayIdx>=duration-1&&allPastCompleted);
+  }
+
+  function getMainMissionForDay(dayIndex){ const pack=state.storyPack; if(!pack||!pack.mainLine)return null; let missions=pack.mainLine.filter(m=>m.day===dayIndex+1); return missions.length?missions[0]:null; }
+
+  function generateDailyMissions(){
+    let list=[]; if(state.contract){ let idx=getTodayIndex(state); if(idx>=0&&idx<state.contract.duration){ let main=getMainMissionForDay(idx); if(main)list.push({id:'main_'+idx,type:'main',speaker:main.speaker,dialogue:main.dialogue,task:main.task,options:main.options.map(o=>({...o})),done:false,reward:0}); } }
+    let subPool=(state.storyPack&&state.storyPack.subPool)?[...state.storyPack.subPool]:[]; let subCount=Math.min(subPool.length,Math.floor(Math.random()*4)+2); let selectedSubs=[],usedIds=new Set();
+    while(selectedSubs.length<subCount&&subPool.length){ let rIdx=Math.floor(Math.random()*subPool.length); let sub=subPool[rIdx]; if(!usedIds.has(sub.id)){ selectedSubs.push({id:'sub_'+Date.now()+'_'+Math.random(),type:'sub',speaker:sub.speaker,dialogue:sub.dialogue,task:sub.task,options:[{text:"完成",reward:sub.reward}],done:false,reward:sub.reward}); usedIds.add(sub.id); } subPool.splice(rIdx,1); }
+    return {date:new Date().toDateString(),list:[...list,...selectedSubs],history:state.commissions.history||{},mainMissionDone:false,mainChoiceIdx:-1};
+  }
+
+  function checkAchievements(){ if(!state.contract)return; let newAch=[]; ACHIEVEMENTS.forEach(a=>{ if(!state.achievements.includes(a.id)&&a.cond(state)){ state.achievements.push(a.id); newAch.push(a.id); state.currentContractAchievements.push(a.id); } }); if(newAch.length){ newAch.forEach(id=>{ let ach=ACHIEVEMENTS.find(a=>a.id===id); showToast(`解锁成就：${ach.icon} ${ach.name}`); }); saveData(); } }
+
+  function applyContractState(){ if(!state.contract){ showPage('contract'); document.getElementById('bottomNav').style.display='none'; return; } if(!state.contract.active){ showCompletePage(); return; } showPage('home'); document.getElementById('bottomNav').style.display='flex'; refreshAll(); }
+
+  function showPage(name){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.getElementById('page-'+name).classList.add('active'); }
+  function showCompletePage(){ showPage('complete'); document.getElementById('bottomNav').style.display='none'; document.getElementById('vowDisplay').textContent=state.currentContractMessage||'（未留下初心）'; document.getElementById('completeRewardList').innerHTML=state.currentContractRewards.length?state.currentContractRewards.map(r=>`<p>${r.emoji} ${r.name} ${'⭐'.repeat(r.rarity)}</p>`).join(''):'<p>暂无奖励</p>'; updatePrimoDisplay(); }
+  function updatePrimoDisplay(){ document.getElementById('primoCountHome').textContent=state.primogems; document.getElementById('primoCountCal').textContent=state.primogems; document.getElementById('completePrimoCount').textContent=state.primogems; }
+
+  async function createContract(startDate,days,message){ archiveCurrentContract(); state.contract={start:new Date(startDate+'T00:00:00').toISOString(),duration:days,active:true,completed:new Array(days).fill(false),mended:new Array(days).fill(false)}; state.commissions=generateDailyMissions(); state.dailyBonusClaimed=false; state.todayLocked=false; state.primogems=0; state.totalGemsEarned=0; state.wishCount=0; state.wishResults=[]; state.achievements=[]; state.currentContractAchievements=[]; state.currentContractRewards=[]; state.currentContractMessage=message||''; state.messageSealed=true; await saveData(); applyContractState(); document.getElementById('vowModal').style.display='none'; }
+  function archiveCurrentContract(){ if(!state.contract)return; let start=new Date(state.contract.start); let end=new Date(start); end.setDate(end.getDate()+state.contract.duration); let done=state.contract.completed.filter(v=>v).length; state.contractHistory.push({start:state.contract.start,end:end.toISOString(),duration:state.contract.duration,doneDays:done,achievements:[...state.currentContractAchievements],rewards:[...state.currentContractRewards],message:state.currentContractMessage,dailyHistory:{...state.commissions.history}}); state.currentContractAchievements=[]; state.currentContractRewards=[]; state.currentContractMessage=''; state.commissions.history={}; }
+
+  function showVowModalAndCreate(startDate,days){ document.getElementById('vowMessageInput').value=''; document.getElementById('vowModal').style.display='flex'; document.getElementById('saveVowBtn').onclick=async()=>{ let msg=document.getElementById('vowMessageInput').value.trim(); await createContract(startDate,days,msg); }; }
+
+  // 渲染委托
+  function renderCommissions(){
+    if(!state.contract)return; let mainContainer=document.getElementById('mainMissionContainer'),container=document.getElementById('commissionList'); mainContainer.innerHTML=''; container.innerHTML='';
+    let mainMission=null,subMissions=[]; state.commissions.list.forEach(item=>{ if(item.type==='main')mainMission=item; else subMissions.push(item); });
+    if(mainMission){
+      let box=document.createElement('div'); box.className='main-mission-box'; let optDisabled=state.todayLocked||mainMission.done;
+      let optionsHtml=mainMission.options.map((opt,i)=>{ let condMet=true; if(opt.cond&&opt.cond.startsWith('primo>=')){ let val=parseInt(opt.cond.split('>=')[1]); condMet=state.primogems>=val; } let chosen=(state.commissions.mainChoiceIdx===i); return `<button class="opt-btn ${chosen?'chosen':''}" data-optidx="${i}" ${optDisabled||!condMet?'disabled':''}>${opt.text} +${opt.reward}💎 ${!condMet?'(原石不足)':''}</button>`; }).join('');
+      box.innerHTML=`<div class="main-label">⚔️ 契约主线</div><div class="dialogue">「${mainMission.speaker}」${mainMission.dialogue}</div><div class="task-desc">📋 ${mainMission.task}</div><div class="options-row">${optionsHtml}</div>`;
+      mainContainer.appendChild(box);
+      if(!optDisabled){ box.querySelectorAll('.opt-btn').forEach(btn=>{ btn.addEventListener('click',(e)=>{ completeMainMission(mainMission,parseInt(btn.dataset.optidx)); }); }); }
+    }else{
+      let msg = (!state.storyPack || !state.storyPack.mainLine || state.storyPack.mainLine.length === 0)
+        ? '未载入主线剧情，请先导入剧情包。'
+        : '今日暂无主线任务，先去完成日常委托吧。';
+      mainContainer.innerHTML=`<p style="color:var(--text2);text-align:center;">${msg}</p>`;
+    }
+    document.getElementById('subMissionLabel').style.display=subMissions.length?'block':'none';
+    subMissions.forEach((item,idx)=>{ let div=document.createElement('div'); div.className=`commission-item ${item.done?'done':''}`; div.innerHTML=`<div class="commission-check ${item.done?'checked':''}"></div><div style="flex:1;"><small style="color:var(--gold);">「${item.speaker}」</small><div class="commission-text">${item.task}</div></div><span class="commission-reward">+${item.reward}💎</span>`; if(!state.todayLocked&&!item.done){ div.querySelector('.commission-check').addEventListener('click',()=>toggleSubMission(idx)); } container.appendChild(div); }); updatePrimoDisplay();
+  }
+
+  async function completeMainMission(mission,optIdx){ if(state.todayLocked||mission.done)return; initAudio(); let opt=mission.options[optIdx]; if(opt.cond&&opt.cond.startsWith('primo>=')){ let val=parseInt(opt.cond.split('>=')[1]); if(state.primogems<val){alert('原石不足');return;} } mission.done=true; mission.reward=opt.reward; state.primogems+=opt.reward; state.totalGemsEarned+=opt.reward; state.commissions.mainMissionDone=true; state.commissions.mainChoiceIdx=optIdx; sfxReward(); spawnFloat(`+${opt.reward}`); checkAllDone(); updateProgress(); checkAchievements(); renderCommissions(); await saveData(); repairAndCheck(); applyContractState(); }
+  async function toggleSubMission(index){ if(state.todayLocked||!state.contract)return; initAudio(); let subMissions=state.commissions.list.filter(i=>i.type==='sub'); if(index<0||index>=subMissions.length)return; let item=subMissions[index]; if(item.done)return; item.done=true; state.primogems+=item.reward; state.totalGemsEarned+=item.reward; sfxReward(); spawnFloat(`+${item.reward}`); checkAllDone(); updateProgress(); checkAchievements(); renderCommissions(); await saveData(); repairAndCheck(); applyContractState(); }
+  function checkAllDone(){ if(state.commissions.list.every(c=>c.done)&&!state.dailyBonusClaimed){ state.dailyBonusClaimed=true; state.todayLocked=true; state.primogems+=20; state.totalGemsEarned+=20; sfxComplete(); spawnFloat('全完成 +20'); showStamp(); showEncourage(); updateCalendarToday(); } }
+  function updateCalendarToday(){ if(!state.contract)return; let start=new Date(state.contract.start); let idx=Math.floor((new Date().setHours(0,0,0,0)-start.setHours(0,0,0,0))/86400000); if(idx>=0&&idx<state.contract.duration)state.contract.completed[idx]=true; }
+
+  function showStamp(){ document.getElementById('dailyStamp').classList.add('show'); setTimeout(()=>document.getElementById('dailyStamp').classList.remove('show'),3000); }
+  function showEncourage(){ if(!state.encouragePool.length)return; showToast(state.encouragePool[Math.floor(Math.random()*state.encouragePool.length)]); }
+  function showToast(msg){ let t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+  function spawnFloat(text){ let f=document.createElement('div'); f.className='float-primo'; f.textContent=text; f.style.left=Math.random()*80+10+'%'; f.style.top='50%'; document.body.appendChild(f); setTimeout(()=>f.remove(),1200); }
+
+  // 日历
+  function renderCalendar(){
+    if(!state.contract)return; let grid=document.getElementById('calendarGrid'); grid.innerHTML=''; let weekdays=['一','二','三','四','五','六','日']; weekdays.forEach(w=>{ let cell=document.createElement('div'); cell.className='weekday-cell'; cell.textContent=w; grid.appendChild(cell); });
+    let start=new Date(state.contract.start); let end=new Date(start); end.setDate(end.getDate()+state.contract.duration); let today=new Date(); today.setHours(0,0,0,0);
+    let calStart=new Date(start); let dayOfWeek=start.getDay(); let diff=dayOfWeek===0?-6:1-dayOfWeek; calStart.setDate(calStart.getDate()+diff);
+    let calEnd=new Date(end); let endDayOfWeek=end.getDay(); calEnd.setDate(calEnd.getDate()+(endDayOfWeek===0?0:7-endDayOfWeek));
+    let month=-1;
+    for(let d=new Date(calStart); d<=calEnd; d.setDate(d.getDate()+1)){
+      let date=new Date(d); let idx=Math.floor((date-start)/86400000); let inRange=idx>=0&&idx<state.contract.duration;
+      if(date.getMonth()!==month){ month=date.getMonth(); let label=document.createElement('div'); label.style.gridColumn='1/-1'; label.textContent=`${date.getFullYear()}年${month+1}月`; label.style.fontSize='0.7rem'; label.style.color='var(--gold)'; grid.appendChild(label); }
+      let cell=document.createElement('div'); cell.className='day-cell'; cell.style.gridColumn=(date.getDay()+6)%7+1;
+      if(inRange){ if(state.contract.completed[idx])cell.classList.add('completed'); if(date.getTime()===today.getTime())cell.classList.add('today'); if(date>today)cell.classList.add('future'); cell.addEventListener('click',()=>toggleCalendarDay(idx,date)); }
+      else{ cell.style.opacity='0.3'; cell.style.cursor='default'; }
+      cell.textContent=date.getDate(); grid.appendChild(cell);
+    }
+  }
+
+  async function toggleCalendarDay(idx,date){ if(!state.contract||date>new Date().setHours(0,0,0,0))return; if(idx<0||idx>=state.contract.duration)return; if(state.contract.completed[idx])return; state.contract.completed[idx]=true; state.primogems+=5; state.totalGemsEarned+=5; sfxReward(); spawnFloat('+5'); showEncourage(); updatePrimoDisplay(); renderCalendar(); updateProgress(); checkAchievements(); await saveData(); repairAndCheck(); applyContractState(); }
+
+  function updateProgress(){ if(!state.contract)return; let done=state.contract.completed.filter(v=>v).length; let pct=(done/state.contract.duration*100).toFixed(1); document.getElementById('progressPercentCal').textContent=pct+'%'; document.getElementById('progressFillCal').style.width=pct+'%'; document.getElementById('doneCountCal').textContent=done; document.getElementById('totalDaysCal').textContent=state.contract.duration; }
+
+  // 祈愿
+  async function performWish(){ initAudio(); if(state.primogems<160){alert('原石不足160！');return;} state.primogems-=160; sfxWish(); let isComplete=state.contract&&!state.contract.active; let rand=Math.random()*100; let rarity=isComplete?(rand<10?5:rand<40?4:3):(rand<5?5:rand<25?4:3); let pool=state.rewardPool.filter(r=>r.rarity===rarity); if(!pool.length){state.primogems+=160;alert('奖励库无对应星级');return;} let result=pool[Math.floor(Math.random()*pool.length)]; state.wishResults.push({...result,time:new Date().toLocaleString()}); state.currentContractRewards.push(result); state.wishCount++; await saveData(); document.getElementById('wishResultContent').innerHTML=`<h2 style="color:var(--gold);">${result.emoji} ${result.name}</h2><p>${'⭐'.repeat(result.rarity)} 奖励</p>`; document.getElementById('wishModal').style.display='flex'; updatePrimoDisplay(); if(document.getElementById('page-complete').classList.contains('active'))showCompletePage(); }
+
+  // 卷轴/印章渲染
+  function renderContractInfo(){ let info=document.getElementById('currentContractInfo'); if(!state.contract){info.innerHTML='';return;} let start=new Date(state.contract.start); let end=new Date(start); end.setDate(end.getDate()+state.contract.duration); let done=state.contract.completed.filter(v=>v).length; let vowText=state.currentContractMessage?'💌 初心已封印':''; info.innerHTML=`<p>📅 ${start.toLocaleDateString()} → ${end.toLocaleDateString()} (${state.contract.duration}天)</p><p>✅ 已完成 ${done} 天 | 💎 原石 ${state.primogems}</p>${vowText?`<p>${vowText}</p>`:''}`; }
+  function renderContractHistory(){ let histDiv=document.getElementById('contractHistoryList'); histDiv.innerHTML=state.contractHistory.slice().reverse().map((h,i)=>{ let realIdx=state.contractHistory.length-1-i; return `<div style="background:rgba(0,0,0,0.25);border-radius:12px;padding:10px;margin:6px 0;cursor:pointer;" data-idx="${realIdx}"><strong>${new Date(h.start).toLocaleDateString()} - ${new Date(h.end).toLocaleDateString()}</strong> (${h.duration}天 完成${h.doneDays})</div>`; }).join('')||'<p style="color:var(--text2);">暂无过往契约</p>'; document.querySelectorAll('#contractHistoryList div[data-idx]').forEach(div=>div.addEventListener('click',()=>showContractDetail(parseInt(div.dataset.idx)))); }
+  function showContractDetail(idx){ let h=state.contractHistory[idx]; let detail=document.getElementById('contractDetailContent'); let achNames=h.achievements.map(id=>{let a=ACHIEVEMENTS.find(a=>a.id===id);return a?`${a.icon} ${a.name}`:id;}).join(', ')||'无'; let rewards=h.rewards.map(r=>`${r.emoji}${r.name}`).join(', ')||'无'; let historyHtml=''; if(h.dailyHistory){ let dates=Object.keys(h.dailyHistory).sort(); historyHtml='<div style="max-height:150px;overflow-y:auto;margin-top:8px;">'; dates.forEach(date=>{let list=h.dailyHistory[date];let doneCount=list.filter(c=>c.done).length;historyHtml+=`<p style="font-size:0.8rem;">📅 ${date} 完成${doneCount}/${list.length}</p>`;}); historyHtml+='</div>'; } detail.innerHTML=`<h3 style="color:var(--gold);">📜 契约详情</h3><p>📅 ${new Date(h.start).toLocaleDateString()} - ${new Date(h.end).toLocaleDateString()}</p><p>📆 ${h.duration} 天 | 完成 ${h.doneDays} 天</p><p>🏅 成就：${achNames}</p><p>🎁 奖励：${rewards}</p><p>💌 初心留言：${h.message||'无'}</p>${historyHtml}<button class="btn" onclick="document.getElementById('contractDetailModal').style.display='none'">关闭</button>`; document.getElementById('contractDetailModal').style.display='flex'; }
+  function renderAchievements(){ let grid=document.getElementById('achievementsGrid'); grid.innerHTML=ACHIEVEMENTS.map(a=>{let unlocked=state.achievements.includes(a.id);return `<div class="badge-card ${unlocked?'':'locked'}"><span class="badge-icon">${a.icon}</span><div><strong>${a.name}</strong><br><small>${a.desc}</small></div></div>`;}).join(''); }
+
+  // 背景/主题
+  function applyBackground(){ if(state.backgroundImage){ document.body.style.backgroundImage=`url('${state.backgroundImage}')`; document.body.classList.add('custom-bg'); } else { document.body.style.backgroundImage=''; document.body.classList.remove('custom-bg'); } }
+  function updateThemeButtons(){ document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b.dataset.theme===state.theme)); }
+  async function setTheme(theme){ state.theme=theme; document.body.setAttribute('data-theme',theme); updateThemeButtons(); await saveData(); }
+  async function setBackgroundImage(url){ state.backgroundImage=url; applyBackground(); await saveData(); }
+  async function clearBackground(){ state.backgroundImage=null; applyBackground(); await saveData(); }
+
+  // 导航
+  function navigateTo(page){
+    if(!state.contract||!state.contract.active)return;
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); document.getElementById('page-'+page).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active')); document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+    if(page==='home')renderCommissions(); if(page==='calendar'){renderCalendar();updateProgress();} if(page==='scroll'){renderContractInfo();renderContractHistory();} if(page==='badges')renderAchievements();
+  }
+  function refreshAll(){ if(!state.contract||!state.contract.active)return; renderCommissions(); renderCalendar(); updateProgress(); renderContractInfo(); renderContractHistory(); renderAchievements(); updatePrimoDisplay(); }
+  function backToHome(){ if(!state.contract)return; state.contract.active=true; saveData(); applyContractState(); }
+
+  // CSV/JSON 工具
+  function escapeCSV(text){ return `"${String(text).replace(/"/g,'""')}"`; }
+  function downloadCSV(headers,rows,filename){ let csv='\uFEFF'+headers.join(',')+'\n'+rows.map(r=>r.map(escapeCSV).join(',')).join('\n'); let blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); }
+  function parseCSV(text){ let lines=text.split(/\r?\n/).filter(line=>line.trim()); if(lines.length<2)return[]; let headers=lines[0].split(',').map(h=>h.trim().toLowerCase()); return lines.slice(1).map(line=>{let vals=line.split(',').map(v=>v.trim().replace(/^"|"$/g,'')); let obj={}; headers.forEach((h,i)=>obj[h]=vals[i]||''); return obj;}); }
+
+  // 剧情包 JSON/CSV
+  function exportStoryJson(){ let json=JSON.stringify(state.storyPack,null,2); let a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json])); a.download='story_pack.json'; a.click(); }
+  function importStoryJson(){ document.getElementById('importModalTitle').textContent='导入剧情包 (JSON)'; document.getElementById('importModal').style.display='flex'; document.getElementById('confirmImportBtn').onclick=async()=>{ try{ let pack=JSON.parse(document.getElementById('importTextarea').value); if(!pack.mainLine||!pack.subPool)throw new Error('格式错误'); state.storyPack=pack; if(state.contract)state.commissions=generateDailyMissions(); document.getElementById('importModal').style.display='none'; await saveData(); applyContractState(); alert('剧情包已导入！'); }catch(e){alert('JSON格式无效');} }; }
+  function exportStoryCsv(){
+    let mainRows=[], subRows=[];
+    state.storyPack.mainLine.forEach(m=>{ let opts=m.options||[]; mainRows.push([m.day,m.speaker,m.dialogue,m.task,opts[0]?.text||'',opts[0]?.reward||'',opts[1]?.text||'',opts[1]?.reward||'',opts[2]?.text||'',opts[2]?.reward||'']); });
+    state.storyPack.subPool.forEach(s=>{ subRows.push([s.id,s.speaker,s.dialogue,s.task,s.reward,s.cat||'']); });
+    let csv='\uFEFF主线\n'+['day','speaker','dialogue','task','opt1_text','opt1_reward','opt2_text','opt2_reward','opt3_text','opt3_reward'].join(',')+'\n'+mainRows.map(r=>r.map(escapeCSV).join(',')).join('\n')+'\n\n副线\n'+['id','speaker','dialogue','task','reward','cat'].join(',')+'\n'+subRows.map(r=>r.map(escapeCSV).join(',')).join('\n');
+    let blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='story_pack.csv'; a.click();
+  }
+  function importStoryCsv(){
+    document.getElementById('importModalTitle').textContent='导入剧情包 (CSV)'; document.getElementById('importModal').style.display='flex';
+    document.getElementById('confirmImportBtn').onclick=async()=>{
+      try{
+        let text=document.getElementById('importTextarea').value; let lines=text.split(/\r?\n/).filter(l=>l.trim());
+        let mainEnd=lines.findIndex(l=>l.toLowerCase().startsWith('副线')); if(mainEnd<0)mainEnd=lines.length;
+        let mainHeaders=lines[1].split(',').map(h=>h.trim()); let mainData=lines.slice(2,mainEnd).filter(l=>!l.startsWith('主线')).map(l=>{ let vals=l.split(',').map(v=>v.trim().replace(/^"|"$/g,'')); let obj={}; mainHeaders.forEach((h,i)=>obj[h]=vals[i]||''); return obj; });
+        let subStart=mainEnd+1; let subHeaders=lines[subStart+1].split(',').map(h=>h.trim()); let subData=lines.slice(subStart+2).map(l=>{ let vals=l.split(',').map(v=>v.trim().replace(/^"|"$/g,'')); let obj={}; subHeaders.forEach((h,i)=>obj[h]=vals[i]||''); return obj; });
+        let newPack={ name:'导入的剧情', mainLine:[], subPool:[] };
+        mainData.forEach(r=>{ let opts=[]; if(r.opt1_text)opts.push({text:r.opt1_text,reward:parseInt(r.opt1_reward)||0}); if(r.opt2_text)opts.push({text:r.opt2_text,reward:parseInt(r.opt2_reward)||0}); if(r.opt3_text)opts.push({text:r.opt3_text,reward:parseInt(r.opt3_reward)||0}); newPack.mainLine.push({day:parseInt(r.day),speaker:r.speaker,dialogue:r.dialogue,task:r.task,options:opts}); });
+        subData.forEach(r=>{ newPack.subPool.push({id:r.id,speaker:r.speaker,dialogue:r.dialogue,task:r.task,reward:parseInt(r.reward)||0,cat:r.cat||''}); });
+        state.storyPack=newPack; if(state.contract)state.commissions=generateDailyMissions(); document.getElementById('importModal').style.display='none'; await saveData(); applyContractState(); alert('剧情包已导入！');
+      }catch(e){alert('CSV格式无效');}
+    };
+  }
+
+  // 委托库
+  function exportCommissionCsv(){ downloadCSV(['text','cat','base'], state.commissionPool.map(c=>[c.text,c.cat,c.base]), 'commission_pool.csv'); }
+  function importCommissionCsv(){ showImportCsvModal('导入委托库 (CSV)',(arr)=>{ state.commissionPool=arr.map(item=>({text:item.text,cat:item.cat||'',base:parseInt(item.base)||5})); }); }
+  function exportCommissionJson(){ let json=JSON.stringify(state.commissionPool,null,2); let a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json])); a.download='commission_pool.json'; a.click(); }
+  function importCommissionJson(){ showImportJsonModal('导入委托库 (JSON)',(obj)=>{ state.commissionPool=obj.map(item=>({text:item.text,cat:item.cat||'',base:parseInt(item.base)||5})); }); }
+  function addCommissionItem(){ showAddItemModal('添加委托',['text','cat','base'],(i)=>{ state.commissionPool.push({text:i.text,cat:i.cat,base:parseInt(i.base)||5}); }); }
+
+  // 奖励库
+  function exportRewardCsv(){ downloadCSV(['name','rarity','emoji'], state.rewardPool.map(r=>[r.name,r.rarity,r.emoji]), 'reward_pool.csv'); }
+  function importRewardCsv(){ showImportCsvModal('导入奖励库 (CSV)',(arr)=>{ state.rewardPool=arr.map(item=>({name:item.name,rarity:parseInt(item.rarity)||3,emoji:item.emoji||'🎁'})); }); }
+  function exportRewardJson(){ let json=JSON.stringify(state.rewardPool,null,2); let a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json])); a.download='reward_pool.json'; a.click(); }
+  function importRewardJson(){ showImportJsonModal('导入奖励库 (JSON)',(obj)=>{ state.rewardPool=obj.map(item=>({name:item.name,rarity:parseInt(item.rarity)||3,emoji:item.emoji||'🎁'})); }); }
+  function addRewardItem(){ showAddItemModal('添加奖励',['name','rarity','emoji'],(i)=>{ state.rewardPool.push({name:i.name,rarity:parseInt(i.rarity)||3,emoji:i.emoji||'🎁'}); }); }
+
+  // 激励语库
+  function exportEncourageCsv(){ downloadCSV(['text'], state.encouragePool.map(t=>[t]), 'encourage_pool.csv'); }
+  function importEncourageCsv(){ showImportCsvModal('导入激励语 (CSV)',(arr)=>{ state.encouragePool=arr.map(item=>item.text||'').filter(t=>t); }); }
+  function exportEncourageJson(){ let json=JSON.stringify(state.encouragePool,null,2); let a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json])); a.download='encourage_pool.json'; a.click(); }
+  function importEncourageJson(){ showImportJsonModal('导入激励语 (JSON)',(obj)=>{ state.encouragePool=obj.filter(t=>t); }); }
+  function addEncourageItem(){ showAddItemModal('添加激励语',['text'],(i)=>{ state.encouragePool.push(i.text); }); }
+
+  function showImportCsvModal(title,callback){ document.getElementById('importModalTitle').textContent=title; document.getElementById('importModal').style.display='flex'; document.getElementById('confirmImportBtn').onclick=()=>{ try{ let arr=parseCSV(document.getElementById('importTextarea').value); callback(arr); document.getElementById('importModal').style.display='none'; saveData(); alert('导入成功！'); }catch(e){alert('格式错误');} }; }
+  function showImportJsonModal(title,callback){ document.getElementById('importModalTitle').textContent=title; document.getElementById('importModal').style.display='flex'; document.getElementById('confirmImportBtn').onclick=()=>{ try{ let obj=JSON.parse(document.getElementById('importTextarea').value); if(!Array.isArray(obj))throw new Error('不是数组'); callback(obj); document.getElementById('importModal').style.display='none'; saveData(); alert('导入成功！'); }catch(e){alert('JSON格式无效');} }; }
+  function showAddItemModal(title,fields,callback){ let content=document.getElementById('addItemContent'); content.innerHTML=`<h3 style="color:var(--gold);">${title}</h3>`; fields.forEach(f=>{ content.innerHTML+=`<input id="addField_${f}" placeholder="${f}" style="width:100%; padding:8px; margin:4px 0; background:#2a241a; border:1px solid var(--border); border-radius:8px; color:var(--text);">`; }); content.innerHTML+=`<button class="btn-primary" id="confirmAddItemBtn">确认</button>`; document.getElementById('addItemModal').style.display='flex'; document.getElementById('confirmAddItemBtn').onclick=()=>{ let item={}; fields.forEach(f=>item[f]=document.getElementById(`addField_${f}`).value); callback(item); document.getElementById('addItemModal').style.display='none'; saveData(); alert('已添加'); }; }
+
+  // 初始化立契按钮事件
+  document.getElementById('initContractBtn').addEventListener('click', function(){
+    let startVal = document.getElementById('initStartInput').value || new Date().toISOString().split('T')[0];
+    let days = parseInt(document.getElementById('initDaysInput').value) || 90;
+    if (!startVal || days < 30 || days > 365) { alert('请输入有效日期和天数(30-365)'); return; }
+    showVowModalAndCreate(startVal, days);
+  });
+
+  // 事件绑定
+  function bindEvents(){
+    document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>navigateTo(btn.dataset.page)));
+    document.querySelectorAll('.theme-btn').forEach(btn=>btn.addEventListener('click',()=>setTheme(btn.dataset.theme)));
+    document.getElementById('wishBtnHome').addEventListener('click',performWish);
+    document.getElementById('wishBtnCal').addEventListener('click',performWish);
+    document.getElementById('completeWishBtn').addEventListener('click',performWish);
+    document.getElementById('backToHomeBtn').addEventListener('click',backToHome);
+    document.getElementById('quickSettingsBtn').addEventListener('click',()=>navigateTo('me'));
+    document.getElementById('recontractBtn').addEventListener('click',()=>{ document.getElementById('newStartInput').value=new Date().toISOString().split('T')[0]; document.getElementById('newDaysInput').value=90; document.getElementById('newContractModal').style.display='flex'; });
+    document.getElementById('confirmNewContractBtn').addEventListener('click',()=>{ let startVal=document.getElementById('newStartInput').value; let days=parseInt(document.getElementById('newDaysInput').value); if(!startVal||isNaN(days)||days<30||days>365)return alert('请输入有效日期和天数(30-365)'); document.getElementById('newContractModal').style.display='none'; showVowModalAndCreate(startVal,days); });
+    document.getElementById('newContractAfterCompleteBtn').addEventListener('click',()=>{ document.getElementById('newStartInput').value=new Date().toISOString().split('T')[0]; document.getElementById('newDaysInput').value=90; document.getElementById('newContractModal').style.display='flex'; });
+    document.getElementById('presetBg1Btn').addEventListener('click',()=>setBackgroundImage(PRESET_BACKGROUNDS[0].url));
+    document.getElementById('presetBg2Btn').addEventListener('click',()=>setBackgroundImage(PRESET_BACKGROUNDS[1].url));
+    document.getElementById('presetBg3Btn').addEventListener('click',()=>setBackgroundImage(PRESET_BACKGROUNDS[2].url));
+    document.getElementById('applyBgUrlBtn').addEventListener('click',()=>{ let url=document.getElementById('bgUrlInput').value.trim(); if(url)setBackgroundImage(url); });
+    document.getElementById('uploadBgBtn').addEventListener('click',()=>document.getElementById('bgFileInput').click());
+    document.getElementById('bgFileInput').addEventListener('change',e=>{ let file=e.target.files[0]; if(!file)return; let reader=new FileReader(); reader.onload=ev=>setBackgroundImage(ev.target.result); reader.readAsDataURL(file); });
+    document.getElementById('clearBgBtn').addEventListener('click',()=>{ if(confirm('清除自定义背景？'))clearBackground(); });
+    document.getElementById('resetAllBtn').addEventListener('click',()=>{ if(confirm('重置所有数据？')){ state.contract=null; state.primogems=0; state.achievements=[]; state.contractHistory=[]; state.commissions={date:new Date().toDateString(),list:[],history:{},mainMissionDone:false,mainChoiceIdx:-1}; state.storyPack=JSON.parse(JSON.stringify(DEFAULT_STORY_PACK)); state.backgroundImage=null; saveData(); applyContractState(); applyBackground(); } });
+
+    // 剧情包按钮
+    document.getElementById('exportStoryJsonBtn').addEventListener('click',exportStoryJson);
+    document.getElementById('importStoryJsonBtn').addEventListener('click',importStoryJson);
+    document.getElementById('exportStoryCsvBtn').addEventListener('click',exportStoryCsv);
+    document.getElementById('importStoryCsvBtn').addEventListener('click',importStoryCsv);
+    document.getElementById('resetStoryBtn').addEventListener('click',()=>{ if(confirm('重置为默认剧情包？')){ state.storyPack=JSON.parse(JSON.stringify(DEFAULT_STORY_PACK)); if(state.contract)state.commissions=generateDailyMissions(); saveData(); applyContractState(); } });
+
+    // 委托库按钮
+    document.getElementById('exportPoolCsvBtn').addEventListener('click',exportCommissionCsv);
+    document.getElementById('importPoolCsvBtn').addEventListener('click',importCommissionCsv);
+    document.getElementById('exportPoolJsonBtn').addEventListener('click',exportCommissionJson);
+    document.getElementById('importPoolJsonBtn').addEventListener('click',importCommissionJson);
+    document.getElementById('addCommissionBtn').addEventListener('click',addCommissionItem);
+
+    // 奖励库按钮
+    document.getElementById('exportRewardCsvBtn').addEventListener('click',exportRewardCsv);
+    document.getElementById('importRewardCsvBtn').addEventListener('click',importRewardCsv);
+    document.getElementById('exportRewardJsonBtn').addEventListener('click',exportRewardJson);
+    document.getElementById('importRewardJsonBtn').addEventListener('click',importRewardJson);
+    document.getElementById('addRewardBtn').addEventListener('click',addRewardItem);
+
+    // 激励语库按钮
+    document.getElementById('exportEncourageCsvBtn').addEventListener('click',exportEncourageCsv);
+    document.getElementById('importEncourageCsvBtn').addEventListener('click',importEncourageCsv);
+    document.getElementById('exportEncourageJsonBtn').addEventListener('click',exportEncourageJson);
+    document.getElementById('importEncourageJsonBtn').addEventListener('click',importEncourageJson);
+    document.getElementById('addEncourageBtn').addEventListener('click',addEncourageItem);
+  }
+
+  // 粒子效果
+  function initParticles(){ let canvas=document.getElementById('particleCanvas'),ctx=canvas.getContext('2d'),particles=[]; function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;} resize(); window.addEventListener('resize',resize); function loop(){ ctx.clearRect(0,0,canvas.width,canvas.height); if(particles.length<25)particles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*2+1,dx:(Math.random()-0.5)*0.3,dy:(Math.random()-0.5)*0.3,alpha:Math.random()*0.4+0.2}); particles.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(201,164,75,${p.alpha})`;ctx.fill();p.x+=p.dx;p.y+=p.dy;if(p.x<0||p.x>canvas.width)p.dx*=-1;if(p.y<0||p.y>canvas.height)p.dy*=-1;}); requestAnimationFrame(loop); } loop(); }
+
+  // 启动
+  async function init(){ await loadData(); initParticles(); bindEvents(); document.body.addEventListener('click',()=>initAudio(),{once:true}); setInterval(()=>{if(!state.contract||!state.contract.active)return;let todayStr=new Date().toDateString();if(state.commissions.date!==todayStr){state.commissions.history[state.commissions.date]=state.commissions.list;state.commissions=generateDailyMissions();state.dailyBonusClaimed=false;state.todayLocked=false;saveData();renderCommissions();}},60000); }
+  init();
+})();
+</script>
+</body>
+</html>
